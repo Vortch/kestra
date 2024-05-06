@@ -13,13 +13,7 @@ import reactor.core.publisher.Flux;
 import reactor.core.publisher.FluxSink;
 import reactor.core.publisher.Mono;
 
-import java.io.BufferedInputStream;
-import java.io.BufferedOutputStream;
-import java.io.BufferedReader;
-import java.io.IOException;
-import java.io.InputStream;
-import java.io.OutputStream;
-import java.io.UncheckedIOException;
+import java.io.*;
 import java.util.Optional;
 import java.util.function.Consumer;
 
@@ -100,21 +94,21 @@ public final class FileSerde {
         return DEFAULT_OBJECT_MAPPER.readValue(row, cls);
     }
 
-    public static Flux<Object> readAll(InputStream in) throws IOException {
-        return readAll(DEFAULT_OBJECT_MAPPER, in, DEFAULT_TYPE_REFERENCE);
+    public static Flux<Object> readAll(Reader reader) throws IOException {
+        return readAll(DEFAULT_OBJECT_MAPPER, reader, DEFAULT_TYPE_REFERENCE);
     }
 
-    public static <T> Flux<T> readAll(InputStream in, TypeReference<T> type) throws IOException {
-        return readAll(DEFAULT_OBJECT_MAPPER, in, type);
+    public static <T> Flux<T> readAll(Reader reader, TypeReference<T> type) throws IOException {
+        return readAll(DEFAULT_OBJECT_MAPPER, reader, type);
     }
 
-    public static Flux<Object> readAll(ObjectMapper objectMapper, InputStream in) throws IOException {
+    public static Flux<Object> readAll(ObjectMapper objectMapper, Reader in) throws IOException {
         return readAll(objectMapper, in, DEFAULT_TYPE_REFERENCE);
     }
 
-    public static <T> Flux<T> readAll(ObjectMapper objectMapper, InputStream in, TypeReference<T> type) throws IOException {
+    public static <T> Flux<T> readAll(ObjectMapper objectMapper, Reader reader, TypeReference<T> type) throws IOException {
         return Flux.generate(
-            () -> createMappingIterator(objectMapper, in, type),
+            () -> createMappingIterator(objectMapper, reader, type),
             throwBiFunction((iterator, sink) -> {
                 final T value = iterator.hasNextValue() ? iterator.nextValue() : null;
                 Optional.ofNullable(value).ifPresentOrElse(sink::next, sink::complete);
@@ -124,23 +118,23 @@ public final class FileSerde {
         );
     }
 
-    public static <T> Mono<Long> writeAll(OutputStream out, Flux<T> values) throws IOException {
-        return writeAll(DEFAULT_OBJECT_MAPPER, out, values);
+    public static <T> Mono<Long> writeAll(Writer writer, Flux<T> values) throws IOException {
+        return writeAll(DEFAULT_OBJECT_MAPPER, writer, values);
     }
 
-    public static <T> Mono<Long> writeAll(ObjectMapper objectMapper, OutputStream out, Flux<T> values) throws IOException {
-        return Mono.using(
-            () -> createSequenceWriter(objectMapper, out),
-            throwFunction((writer) -> values.doOnNext(throwConsumer(writer::write)).count()),
-            throwConsumer(SequenceWriter::close)
-        );
+    public static <T> Mono<Long> writeAll(ObjectMapper objectMapper, Writer writer, Flux<T> values) throws IOException {
+        SequenceWriter seqWriter = createSequenceWriter(objectMapper, writer);
+        return values
+            .doOnNext(throwConsumer(value -> seqWriter.write(value)))
+            .doFinally(throwConsumer(ignored -> seqWriter.flush())) // we should have called close() but it generates an exception, so we flush
+            .count();
     }
 
-    private static <T> MappingIterator<T> createMappingIterator(ObjectMapper objectMapper, InputStream in, TypeReference<T> type) throws IOException {
-        return objectMapper.readerFor(type).readValues(new BufferedInputStream(in, BUFFER_SIZE));
+    private static <T> MappingIterator<T> createMappingIterator(ObjectMapper objectMapper, Reader reader, TypeReference<T> type) throws IOException {
+        return objectMapper.readerFor(type).readValues(new BufferedReader(reader, BUFFER_SIZE));
     }
 
-    private static SequenceWriter createSequenceWriter(ObjectMapper objectMapper, OutputStream out) throws IOException {
-        return objectMapper.writer().writeValues(new BufferedOutputStream(out, BUFFER_SIZE));
+    private static SequenceWriter createSequenceWriter(ObjectMapper objectMapper, Writer writer) throws IOException {
+        return objectMapper.writer().writeValues(new BufferedWriter(writer, BUFFER_SIZE));
     }
 }
