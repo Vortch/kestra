@@ -412,7 +412,7 @@ task writeExecutableJar() {
         executableBytes.write("\r\n".getBytes())
         executableBytes.write("END_OF_KESTRA_SELFRUN\r\n\n".getBytes())
         executableBytes.write(file("gradle/jar/selfrun.sh").readBytes())
-        ZipPrefixer.applyPrefixBytesToZip(executable.toPath(), executableBytes.toByteArray())
+//        ZipPrefixer.applyPrefixBytesToZip(executable.toPath(), executableBytes.toByteArray())
         executable.setExecutable(true)
     }
 }
