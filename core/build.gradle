@@ -20,6 +20,7 @@ dependencies {
 
     // serializers
     implementation group: 'com.fasterxml.jackson.dataformat', name: 'jackson-dataformat-ion'
+    implementation group: 'com.amazon.ion', name: 'ion-java', version: '1.11.7' // TODO when the dependency from jackson-dataformat-ion is at least at 1.11.7 we can remove this entry
 
     // reactor
     api "io.projectreactor:reactor-core"
